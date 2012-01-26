@@ -1,6 +1,8 @@
 /* A tftp client implementation.
    Author: Erik Nordström <erikn@it.uu.se>
 */
+// ./tftp -p egemen.txt myftp
+// ./tftp -p egemen.txt  joshua.it.uu.se
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -183,8 +185,19 @@ int tftp_send_wrq(struct tftp_conn *tc)
 int tftp_send_ack(struct tftp_conn *tc)
 {
 	/* struct tftp_ack *ack; */
-        
-        return 0;
+        u_int16_t blocknr;
+	memset(tc->msgbuf, 0, MSGBUF_SIZE);
+
+	struct tftp_ack *ack;
+	ack=malloc(TFTP_ACK_HDR_LEN);
+	ack->opcode=htons((u_short)OPCODE_ACK);
+	ack->blocknr=tc->blocknr;
+        blocknr=htons(ack->blocknr);
+
+	mempcpy (tc->msgbuf,&ack->opcode, sizeof(ack->opcode));
+	mempcpy (tc->msgbuf+2,&blocknr, sizeof(ack->blocknr));
+	int size = sendto(tc->sock, tc->msgbuf, TFTP_ACK_HDR_LEN, 0, (struct sockaddr*)&tc->peer_addr,sizeof(tc->peer_addr) );
+        return size;
 }
 
 /*
@@ -260,6 +273,7 @@ int tftp_transfer(struct tftp_conn *tc)
          u_int16_t server_counter;
          int data_length;
 	 int fromlen;
+	int totaldata=0;
 	 //memset(tc->msgbuf, 0, MSGBUF_SIZE);
 	do {
 		/* 1. Wait for something from the server (using
@@ -284,23 +298,32 @@ int tftp_transfer(struct tftp_conn *tc)
 		switch ( msg_type ) {
 		case OPCODE_DATA:
                         /* Received data block, send ack */
-			printf("Received data block, send ack!\n");
+			printf("Received data block, send ack!%d\n",totlen);
+			tc->blocknr=block_number;
+                        fwrite((tc->msgbuf)+(2*sizeof(block_number)), 1, totlen-4 , tc->fp);
+			tftp_send_ack(tc);
+			if (totlen-2*sizeof(block_number)<512)
+				data_length=0;
 			break;
 		case OPCODE_ACK:
-			printf("Received ACK, send block! %d\n",block_number);
-
+			printf("\n\nReceived ACK, send block! %d\n",block_number);
 			counter++;
 			server_counter=htons(counter);
-			printf("server counter:%d %d",server_counter,ntohs(server_counter));
+			//printf("server counter:%d %d",server_counter,ntohs(server_counter));
                         /* Received ACK, send next block */
 			u_int16_t opcode=htons((u_int16_t)OPCODE_DATA);
 			                        
                         mempcpy(tc->msgbuf, &opcode, sizeof(opcode));
-                        mempcpy((tc->msgbuf)+sizeof(opcode), &server_counter, sizeof(server_counter));
-			printf("start reading data!");
-                        data_length=fread((tc->msgbuf)+(2*sizeof(opcode)), 1, BLOCK_SIZE , tc->fp);
+                        mempcpy(tc->msgbuf+sizeof(opcode), &server_counter, sizeof(server_counter));
+			printf("\nstart reading data!");
+                        data_length=fread(tc->msgbuf+(2*sizeof(opcode)), 1, BLOCK_SIZE , tc->fp);
 			printf("\nread data length %d\n",data_length);
-			tftp_send_data(tc,data_length);
+                        if (data_length!=0)
+			{
+				 tftp_send_data(tc,data_length);
+				 totaldata+=data_length;
+				 memset(tc->msgbuf, 0, MSGBUF_SIZE);
+			}
                         
 			break;
 		case OPCODE_ERR:
@@ -313,9 +336,9 @@ int tftp_transfer(struct tftp_conn *tc)
 
 		}
 
-	} while ( data_length>=512 /* 3. Loop until file is finished */);
+	} while ( data_length>0 /* 3. Loop until file is finished */);
 
-	printf("\nTotal data bytes sent/received: %d.\n", totlen);
+	printf("\nTotal data bytes sent/received: %d.\n", totaldata);
 	out:
         //fclose(tc->fp);
 	return retval;
@@ -358,7 +381,7 @@ int main (int argc, char **argv)
 	}
 
         /* Connect to the remote server */
-	tc = tftp_connect(type, fname, MODE_NETASCII, hostname);
+	tc = tftp_connect(type, fname, MODE_OCTET, hostname);
 
 	if (!tc) {
 		fprintf(stderr, "Failed to connect!\n");

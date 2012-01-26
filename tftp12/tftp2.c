@@ -85,7 +85,7 @@ struct tftp_conn *tftp_connect(int type, char *fname, char *mode,
 	else {
 		fprintf(stderr, "Invalid TFTP mode, must be put or get\n");
 		return NULL;		
-	}
+	}t
 		 
 	if (tc->fp == NULL) {
 		fprintf(stderr, "File I/O error!\n");
