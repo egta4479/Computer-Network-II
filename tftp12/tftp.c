@@ -41,7 +41,7 @@ struct tftp_conn {
 	char *mode; /* TFTP mode */
 	struct sockaddr_in peer_addr; /* Remote peer address */
 	socklen_t addrlen; /* The remote address length */
-	char msgbuf[MSGBUF_SIZE+100]; /* Buffer for messages being sent or received */
+	char msgbuf[MSGBUF_SIZE]; /* Buffer for messages being sent or received */
 };
 
 /* Close the connection handle, i.e., delete our local state. */
@@ -169,8 +169,7 @@ int tftp_send_wrq(struct tftp_conn *tc)
         mempcpy (tc->msgbuf+2+strlen(tc->fname)+1,tc->mode, strlen(tc->mode));
         mempcpy (tc->msgbuf+2+strlen(tc->fname)+1+strlen(tc->mode),&endbyte, sizeof(endbyte));
 	int size = sendto(tc->sock, tc->msgbuf, TFTP_RRQ_LEN(tc->fname, tc->mode), 0, (struct sockaddr*)&tc->peer_addr,sizeof(tc->peer_addr) );
-	free(wrq);
-        wrq = NULL;
+
         memset(tc->msgbuf,0,MSGBUF_SIZE);
         return size;
 }
@@ -220,7 +219,7 @@ int tftp_transfer(struct tftp_conn *tc)
 	int len;
 	int totlen = 0;
 	struct timeval timeout;
-
+	struct sockaddr_in from;
         /* Sanity check */
 	if (!tc)
 		return -1;
@@ -260,13 +259,16 @@ int tftp_transfer(struct tftp_conn *tc)
          u_int16_t counter=0;
          u_int16_t server_counter;
          int data_length;
+	 int fromlen;
 	 //memset(tc->msgbuf, 0, MSGBUF_SIZE);
 	do {
 		/* 1. Wait for something from the server (using
                  * 'select'). If a timeout occurs, resend last block
                  * or ack depending on whether we are in put or get
                  * mode. */
-		totlen=recvfrom(tc->sock,tc->msgbuf,MSGBUF_SIZE,0,NULL,NULL);
+                fromlen = sizeof(from);
+		totlen=recvfrom(tc->sock,tc->msgbuf,MSGBUF_SIZE,0,(struct sockaddr *)&from, &fromlen);
+		tc->peer_addr.sin_port = from.sin_port;
 
                 /* ... */
 		u_int16_t msg_type;
@@ -286,6 +288,7 @@ int tftp_transfer(struct tftp_conn *tc)
 			break;
 		case OPCODE_ACK:
 			printf("Received ACK, send block! %d\n",block_number);
+
 			counter++;
 			server_counter=htons(counter);
 			printf("server counter:%d %d",server_counter,ntohs(server_counter));
@@ -297,7 +300,7 @@ int tftp_transfer(struct tftp_conn *tc)
 			printf("start reading data!");
                         data_length=fread((tc->msgbuf)+(2*sizeof(opcode)), 1, BLOCK_SIZE , tc->fp);
 			printf("\nread data length %d\n",data_length);
-			//tftp_send_data(tc,data_length);
+			tftp_send_data(tc,data_length);
                         
 			break;
 		case OPCODE_ERR:
@@ -310,11 +313,11 @@ int tftp_transfer(struct tftp_conn *tc)
 
 		}
 
-	} while ( data_length>0 /* 3. Loop until file is finished */);
+	} while ( data_length>=512 /* 3. Loop until file is finished */);
 
 	printf("\nTotal data bytes sent/received: %d.\n", totlen);
 	out:
-        fclose(tc->fp);
+        //fclose(tc->fp);
 	return retval;
 }
 
