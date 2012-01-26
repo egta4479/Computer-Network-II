@@ -126,6 +126,17 @@ err_out:
 	return NULL;
 }
 
+
+/*
+ struct line {
+       int length;
+       char contents[0];
+     };
+     
+     struct line *thisline = (struct line *)
+       malloc (sizeof (struct line) + this_length);
+     thisline->length = this_length;
+*/
 /*
   Send a read request to the server.
   1. Format message.
@@ -134,11 +145,13 @@ err_out:
  */
 int tftp_send_rrq(struct tftp_conn *tc)
 {
-	printf("***Read request\n");
+
+
+	printf("Read request\n");
 	int size;
 	struct tftp_rrq *rrq;
 	rrq = malloc(TFTP_RRQ_HDR_LEN);
-	rrq->opcode = TFTP_OPC_RRQ;
+	
 	size = sendto(tc->sock, &tc->msgbuf, TFTP_RRQ_LEN(tc->fname, tc->mode), 0, (struct sockaddr_in*)&tc->peer_addr, (int) &tc->addrlen);
 	//recvfrom(tc->sock,&tc->msgbuf,MSGBUF_SIZE,0,(struct sockaddr *)&tc->peer_addr,&tc->addrlen)
    close(tc->sock);

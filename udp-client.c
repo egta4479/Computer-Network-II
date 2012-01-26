@@ -34,6 +34,7 @@ int main(int argc, char**argv)
    readreq->mode=MODE_NETASCII;
    readreq->endbyte=0;
 
+  
    printf("filename =%s and size= %d \n",readreq->fname,sizeof(readreq->fname));
    sockfd=socket(AF_INET,SOCK_DGRAM,0);
 
@@ -55,7 +56,7 @@ int main(int argc, char**argv)
              (struct sockaddr *)&servaddr,sizeof(servaddr));
    u_int16_t myopcode=0;
    mempcpy (&myopcode,(u_int16_t *)result, sizeof(readreq->opcode));
-   printf("package sent and opcode %hd\n",myopcode);
+   printf("package sent and opcode %hd\n",ntohs(myopcode));
    free(result);
    result = NULL;
    void *kresult = malloc (512);
@@ -75,7 +76,10 @@ int main(int argc, char**argv)
    memcpy(errcode,(u_int16_t *)(kresult+2+1),1);
    u_int16_t reerror2=*errcode; 
 
-
+   u_int16_t *trial;
+   trial=malloc(2);
+   memcpy(trial,(u_int16_t *)kresult,2);
+   printf("REAL RESULT=%d,\n",ntohs(*trial));
    int opcoderesult=reop<<8|reop2;
    int errorresult=reerror<<8|reerror2;   
    
